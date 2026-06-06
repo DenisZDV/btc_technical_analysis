@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC — Volume Profile</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d0d0d;
+  color: #c8c8c8;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  padding: 1.25rem;
+  min-height: 100vh;
+}
+
+/* HEADER */
+#header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+#header h1 { font-size: 15px; font-weight: 400; color: #e0e0e0; letter-spacing: 0.04em; }
+#header span { font-size: 13px; color: #888; }
+#source-badge {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid #1a3a2a;
+  color: #26a69a;
+}
+#source-badge.warn { border-color: #3a2a1a; color: #f59e0b; }
+#source-badge.err  { border-color: #3a1a1a; color: #ef5350; }
+
+/* CONTROLS */
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.tf-btn {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.tf-btn:hover { border-color: #444; color: #aaa; }
+.tf-btn.active { border-color: #3a7bd5; color: #3a7bd5; background: rgba(58,123,213,0.1); }
+
+#period-label { font-size: 12px; color: #555; margin-left: 8px; }
+
+/* STATS ROW */
+#stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.stat {
+  background: #111;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  min-width: 130px;
+}
+.stat-label { font-size: 10px; color: #555; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+.stat-value { font-size: 18px; font-weight: 500; color: #e0e0e0; }
+.stat-value.poc  { color: #ef5350; }
+.stat-value.vah  { color: #3a7bd5; }
+.stat-value.val  { color: #3a7bd5; }
+.stat-value.range { color: #888; font-size: 14px; }
+
+/* MAIN LAYOUT */
+#main {
+  display: flex;
+  gap: 0;
+  height: 480px;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* CANDLE PANEL */
+#candle-panel {
+  flex: 1;
+  position: relative;
+  background: #0d0d0d;
+  border-right: 1px solid #1a1a1a;
+}
+#candle-canvas { width: 100%; height: 100%; display: block; }
+
+/* PROFILE PANEL */
+#profile-panel {
+  width: 140px;
+  position: relative;
+  background: #0d0d0d;
+  flex-shrink: 0;
+}
+#profile-canvas { width: 100%; height: 100%; display: block; }
+
+/* PRICE AXIS */
+#price-axis {
+  width: 64px;
+  flex-shrink: 0;
+  position: relative;
+  background: #0d0d0d;
+}
+#axis-canvas { width: 100%; height: 100%; display: block; }
+
+/* STATUS */
+#status { font-size: 11px; color: #444; margin-top: 0.5rem; text-align: center; }
+
+/* LEGEND */
+#legend {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  font-size: 11px;
+  color: #555;
+  flex-wrap: wrap;
+}
+.leg { display: flex; align-items: center; gap: 6px; }
+.leg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.leg-dot.poc  { background: #ef5350; }
+.leg-dot.va   { background: rgba(58,123,213,0.5); }
+.leg-dot.bar  { background: rgba(38,166,154,0.4); }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>BTC / USDT</h1>
+  <span>Volume Profile</span>
+  <span id="source-badge">—</span>
+</div>
+
+<div id="controls">
+  <span style="font-size:11px;color:#555;margin-right:4px;">PERIOD</span>
+  <button class="tf-btn" data-days="7">7D</button>
+  <button class="tf-btn active" data-days="30">30D</button>
+  <button class="tf-btn" data-days="90">90D</button>
+  <button class="tf-btn" data-days="180">180D</button>
+  <span id="period-label"></span>
+</div>
+
+<div id="stats">
+  <div class="stat"><div class="stat-label">POC — Point of Control</div><div class="stat-value poc" id="poc-val">—</div></div>
+  <div class="stat"><div class="stat-label">VAH — Value Area High</div><div class="stat-value vah" id="vah-val">—</div></div>
+  <div class="stat"><div class="stat-label">VAL — Value Area Low</div><div class="stat-value val" id="val-val">—</div></div>
+  <div class="stat"><div class="stat-label">Price Range</div><div class="stat-value range" id="range-val">—</div></div>
+  <div class="stat"><div class="stat-label">Value Area Vol %</div><div class="stat-value" id="va-pct-val">—</div></div>
+</div>
+
+<div id="main">
+  <div id="candle-panel"><canvas id="candle-canvas"></canvas></div>
+  <div id="profile-panel"><canvas id="profile-canvas"></canvas></div>
+  <div id="price-axis"><canvas id="axis-canvas"></canvas></div>
+</div>
+
+<div id="status">Загрузка...</div>
+
+<div id="legend">
+  <div class="leg"><div class="leg-dot poc"></div><span>POC — уровень максимального объёма</span></div>
+  <div class="leg"><div class="leg-dot va"></div><span>Value Area — зона 70% объёма (VAH / VAL)</span></div>
+  <div class="leg"><div class="leg-dot bar"></div><span>Volume bar — объём на ценовом уровне</span></div>
+</div>
+
+<script>
+// ── EXCHANGES ──────────────────────────────────────────────────────────────
+const EXCHANGES = [
+  {
+    name: 'Binance',
+    url: (days) => {
+      const interval = days <= 7 ? '1h' : days <= 30 ? '4h' : '1d';
+      const limit = Math.min(1000, days * (days <= 7 ? 24 : days <= 30 ? 6 : 1));
+      return `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`;
+    },
+    parse: (d) => ({ t: d[0]/1000, o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5] })
+  },
+  {
+    name: 'Bybit',
+    url: (days) => {
+      const interval = days <= 7 ? '60' : days <= 30 ? '240' : 'D';
+      const limit = Math.min(1000, days * (days <= 7 ? 24 : days <= 30 ? 6 : 1));
+      return `https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=${interval}&limit=${limit}`;
+    },
+    parse: (data) => {
+      const arr = data.result?.list || [];
+      return arr.map(d => ({ t: +d[0]/1000, o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5] })).reverse();
+    }
+  },
+  {
+    name: 'OKX',
+    url: (days) => {
+      const bar = days <= 7 ? '1H' : days <= 30 ? '4H' : '1D';
+      const limit = Math.min(300, days * (days <= 7 ? 24 : days <= 30 ? 6 : 1));
+      return `https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=${bar}&limit=${limit}`;
+    },
+    parse: (data) => {
+      const arr = data.data || [];
+      return arr.map(d => ({ t: +d[0]/1000, o: +d[1], h: +d[2], l: +d[3], c: +d[4], v: +d[5] })).reverse();
+    }
+  }
+];
+
+async function fetchWithTimeout(url, ms = 8000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    return r.json();
+  } catch(e) { clearTimeout(tid); throw e; }
+}
+
+async function loadCandles(days) {
+  for (const ex of EXCHANGES) {
+    try {
+      const raw = await fetchWithTimeout(ex.url(days));
+      let candles;
+      if (typeof ex.parse === 'function') {
+        candles = Array.isArray(raw) ? raw.map(ex.parse) : ex.parse(raw);
+      }
+      if (!candles || candles.length < 10) continue;
+      candles.sort((a,b) => a.t - b.t);
+      setStatus(`${ex.name} · ${candles.length} bars`, 'ok');
+      return candles;
+    } catch(e) { continue; }
+  }
+  throw new Error('All exchanges failed');
+}
+
+// ── VOLUME PROFILE ─────────────────────────────────────────────────────────
+function computeProfile(candles, bins = 60) {
+  const highs = candles.map(c => c.h);
+  const lows  = candles.map(c => c.l);
+  const minP = Math.min(...lows);
+  const maxP = Math.max(...highs);
+  const step = (maxP - minP) / bins;
+
+  const vol = new Float64Array(bins);
+
+  candles.forEach(c => {
+    const totalV = c.v;
+    const cRange = c.h - c.l;
+    if (cRange === 0) {
+      const bi = Math.min(Math.floor((c.c - minP) / step), bins - 1);
+      if (bi >= 0) vol[bi] += totalV;
+      return;
+    }
+    // distribute volume proportionally across price bins touched by this candle
+    for (let i = 0; i < bins; i++) {
+      const binLow  = minP + i * step;
+      const binHigh = binLow + step;
+      const overlap = Math.max(0, Math.min(c.h, binHigh) - Math.max(c.l, binLow));
+      vol[i] += totalV * (overlap / cRange);
+    }
+  });
+
+  const totalVol = vol.reduce((a,b) => a+b, 0);
+  const pocIdx = vol.indexOf(Math.max(...vol));
+
+  // Value Area: expand from POC until 70% of total volume
+  const VA_TARGET = 0.70;
+  let lo = pocIdx, hi = pocIdx, vaVol = vol[pocIdx];
+  while (vaVol / totalVol < VA_TARGET && (lo > 0 || hi < bins - 1)) {
+    const addLo = lo > 0 ? vol[lo - 1] : -Infinity;
+    const addHi = hi < bins - 1 ? vol[hi + 1] : -Infinity;
+    if (addLo >= addHi) { lo--; vaVol += vol[lo]; }
+    else { hi++; vaVol += vol[hi]; }
+  }
+
+  return {
+    vol, minP, maxP, step, bins,
+    poc: minP + (pocIdx + 0.5) * step,
+    vah: minP + (hi + 1) * step,
+    val: minP + lo * step,
+    pocIdx, loIdx: lo, hiIdx: hi,
+    totalVol,
+    vaPct: vaVol / totalVol
+  };
+}
+
+// ── DRAWING ────────────────────────────────────────────────────────────────
+const C = (id) => document.getElementById(id);
+const COLORS = {
+  bg: '#0d0d0d',
+  grid: '#161616',
+  text: '#444',
+  textBright: '#888',
+  up: '#26a69a',
+  dn: '#ef5350',
+  poc: '#ef5350',
+  va: 'rgba(58,123,213,0.35)',
+  vaLine: '#3a7bd5',
+  bar: 'rgba(38,166,154,0.45)',
+  barHighlight: 'rgba(38,166,154,0.8)',
+};
+
+let state = { candles: null, profile: null, days: 30 };
+
+function fmt(p) { return '$' + p.toLocaleString('en-US', {maximumFractionDigits: 0}); }
+
+function dpr() { return window.devicePixelRatio || 1; }
+
+function resizeCanvas(canvas) {
+  const r = dpr();
+  const w = canvas.parentElement.clientWidth;
+  const h = canvas.parentElement.clientHeight;
+  canvas.width = w * r;
+  canvas.height = h * r;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(r, r);
+  return { ctx, w, h };
+}
+
+function drawAll() {
+  if (!state.candles || !state.profile) return;
+  const { candles, profile } = state;
+  drawCandles(candles, profile);
+  drawProfile(profile);
+  drawAxis(profile);
+  updateStats(profile);
+}
+
+function drawCandles(candles, profile) {
+  const canvas = C('candle-canvas');
+  const { ctx, w, h } = resizeCanvas(canvas);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, w, h);
+
+  const PAD_T = 20, PAD_B = 28;
+  const chartH = h - PAD_T - PAD_B;
+
+  const priceMin = profile.minP;
+  const priceMax = profile.maxP;
+  const priceRange = priceMax - priceMin;
+
+  const toY = (p) => PAD_T + (1 - (p - priceMin) / priceRange) * chartH;
+
+  // grid lines at VAH, POC, VAL
+  [[profile.vah, COLORS.vaLine, [4,4]], [profile.poc, COLORS.poc, [4,4]], [profile.val, COLORS.vaLine, [4,4]]].forEach(([p, col, dash]) => {
+    ctx.strokeStyle = col + '55';
+    ctx.lineWidth = 1;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(0, toY(p));
+    ctx.lineTo(w, toY(p));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // VA background band
+  const vahY = toY(profile.vah);
+  const valY = toY(profile.val);
+  ctx.fillStyle = 'rgba(58,123,213,0.05)';
+  ctx.fillRect(0, vahY, w, valY - vahY);
+
+  // candles
+  const n = candles.length;
+  const candleW = Math.max(1, w / n);
+  const bodyW = Math.max(1, candleW * 0.6);
+
+  candles.forEach((c, i) => {
+    const x = (i + 0.5) * w / n;
+    const isUp = c.c >= c.o;
+    const col = isUp ? COLORS.up : COLORS.dn;
+
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, toY(c.h));
+    ctx.lineTo(x, toY(c.l));
+    ctx.stroke();
+
+    const y1 = toY(Math.max(c.o, c.c));
+    const y2 = toY(Math.min(c.o, c.c));
+    const bh = Math.max(1, y2 - y1);
+    ctx.fillStyle = col;
+    ctx.fillRect(x - bodyW/2, y1, bodyW, bh);
+  });
+
+  // price axis labels bottom
+  ctx.fillStyle = COLORS.textBright;
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+  const lastC = candles[candles.length-1];
+  ctx.fillStyle = COLORS.text;
+  ctx.fillText('← time →', w/2 - 30, h - 8);
+}
+
+function drawProfile(profile) {
+  const canvas = C('profile-canvas');
+  const { ctx, w, h } = resizeCanvas(canvas);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, w, h);
+
+  const PAD_T = 20, PAD_B = 28;
+  const chartH = h - PAD_T - PAD_B;
+
+  const { vol, bins, minP, maxP, step, pocIdx, loIdx, hiIdx, totalVol } = profile;
+  const maxVol = Math.max(...vol);
+  const priceRange = maxP - minP;
+  const barH = chartH / bins;
+  const toY = (p) => PAD_T + (1 - (p - minP) / priceRange) * chartH;
+
+  // header
+  ctx.fillStyle = '#555';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Volume Profile', w/2, 13);
+
+  for (let i = 0; i < bins; i++) {
+    const binLow = minP + i * step;
+    const y = toY(binLow + step);
+    const bh = Math.max(1, barH);
+    const bw = (vol[i] / maxVol) * (w - 4);
+
+    const inVA = i >= loIdx && i <= hiIdx;
+    const isPOC = i === pocIdx;
+
+    ctx.fillStyle = isPOC ? COLORS.poc :
+                   inVA  ? COLORS.barHighlight :
+                            COLORS.bar;
+    ctx.fillRect(2, y, bw, bh - 1);
+  }
+
+  // VAH / VAL dashed lines
+  [[profile.vah, COLORS.vaLine], [profile.val, COLORS.vaLine]].forEach(([p, col]) => {
+    ctx.strokeStyle = col + '88';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    ctx.moveTo(0, toY(p));
+    ctx.lineTo(w, toY(p));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // POC line
+  ctx.strokeStyle = COLORS.poc + 'cc';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, toY(profile.poc));
+  ctx.lineTo(w, toY(profile.poc));
+  ctx.stroke();
+
+  // Labels
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  const labelX = w - 3;
+
+  [[profile.vah, COLORS.vaLine, 'VAH'], [profile.val, COLORS.vaLine, 'VAL'], [profile.poc, COLORS.poc, 'POC']].forEach(([p, col, lbl]) => {
+    const y = toY(p);
+    ctx.fillStyle = col;
+    ctx.fillText(lbl, labelX, y - 2);
+  });
+}
+
+function drawAxis(profile) {
+  const canvas = C('axis-canvas');
+  const { ctx, w, h } = resizeCanvas(canvas);
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, w, h);
+
+  const PAD_T = 20, PAD_B = 28;
+  const chartH = h - PAD_T - PAD_B;
+  const { minP, maxP } = profile;
+  const priceRange = maxP - minP;
+  const toY = (p) => PAD_T + (1 - (p - minP) / priceRange) * chartH;
+
+  ctx.font = '9px JetBrains Mono, monospace';
+  ctx.textAlign = 'left';
+
+  // grid ticks
+  const ticks = 8;
+  for (let i = 0; i <= ticks; i++) {
+    const p = minP + (i / ticks) * priceRange;
+    const y = toY(p);
+    ctx.fillStyle = COLORS.text;
+    ctx.fillText(fmt(p), 4, y + 3);
+  }
+
+  // POC / VAH / VAL labels
+  [[profile.poc, COLORS.poc], [profile.vah, COLORS.vaLine], [profile.val, COLORS.vaLine]].forEach(([p, col]) => {
+    ctx.fillStyle = col;
+    ctx.fillText(fmt(p), 4, toY(p) + 3);
+  });
+}
+
+function updateStats(profile) {
+  C('poc-val').textContent = fmt(profile.poc);
+  C('vah-val').textContent = fmt(profile.vah);
+  C('val-val').textContent = fmt(profile.val);
+  C('range-val').textContent = fmt(profile.minP) + ' – ' + fmt(profile.maxP);
+  C('va-pct-val').textContent = (profile.vaPct * 100).toFixed(1) + '%';
+
+  const days = state.days;
+  const from = new Date(Date.now() - days * 86400000);
+  C('period-label').textContent = from.toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' → now';
+}
+
+function setStatus(msg, type = 'ok') {
+  const b = C('source-badge');
+  b.textContent = msg;
+  b.className = type;
+  C('status').textContent = '';
+}
+
+// ── DEMO DATA ──────────────────────────────────────────────────────────────
+function generateDemoCandles(days) {
+  const candles = [];
+  let price = 94000 + (Math.random() - 0.5) * 8000;
+  const now = Date.now();
+  const interval = days <= 7 ? 3600 : days <= 30 ? 14400 : 86400;
+  const bars = Math.min(500, days * (days <= 7 ? 24 : days <= 30 ? 6 : 1));
+  const startT = now / 1000 - bars * interval;
+  for (let i = 0; i < bars; i++) {
+    const t = startT + i * interval;
+    const drift = (Math.random() - 0.48) * 0.012;
+    const vol_pct = 0.008 + Math.random() * 0.025;
+    const o = price;
+    const range = price * vol_pct;
+    const h = o + range * (0.3 + Math.random() * 0.7);
+    const l = o - range * (0.3 + Math.random() * 0.7);
+    const c = o + (Math.random() - 0.5) * range * 1.2;
+    price = Math.max(70000, Math.min(120000, c * (1 + drift)));
+    const v = 200 + Math.random() * 1800;
+    candles.push({ t, o, h: Math.max(o,c,h), l: Math.min(o,c,l), c, v });
+  }
+  return candles;
+}
+
+// ── MAIN ───────────────────────────────────────────────────────────────────
+async function load(days) {
+  state.days = days;
+  C('status').textContent = 'Loading...';
+  C('poc-val').textContent = C('vah-val').textContent = C('val-val').textContent = '—';
+  try {
+    const candles = await loadCandles(days);
+    const profile = computeProfile(candles, 60);
+    state.candles = candles;
+    state.profile = profile;
+    drawAll();
+  } catch(e) {
+    // Demo fallback — realistic BTC price simulation
+    setStatus('Demo data · exchanges unreachable', 'warn');
+    const candles = generateDemoCandles(days);
+    const profile = computeProfile(candles, 60);
+    state.candles = candles;
+    state.profile = profile;
+    drawAll();
+  }
+}
+
+// TF buttons
+document.querySelectorAll('.tf-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    load(+btn.dataset.days);
+  });
+});
+
+window.addEventListener('resize', drawAll);
+load(30);
+</script>
+</body>
+</html>
