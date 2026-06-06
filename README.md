@@ -4,7 +4,7 @@ Two standalone browser tools for Bitcoin market analysis. No backend, no depende
 
 ## Tools
 
-<img width="750" height="619" alt="image" src="https://github.com/user-attachments/assets/1acdaaa9-a014-481e-b3aa-657a410eace6" />
+<img width="750" height="619" alt="image" src="https://github.com/user-attachments/assets/153d067f-1a69-49bf-bced-66239efbc638" />
 
 ### `btc_distribution.html` — Return Distribution
 Daily return distribution for BTC over the last 365 days with interactive probability calculator.
@@ -19,8 +19,7 @@ Daily return distribution for BTC over the last 365 days with interactive probab
 
 ---
 
-<img width="683" height="791" alt="image" src="https://github.com/user-attachments/assets/1ebdb999-90c6-4e3c-8484-e48409821d4c" />
-
+<img width="750" height="831" alt="image" src="https://github.com/user-attachments/assets/7f03ebcf-f4b4-4ca7-907d-8c447d8cd0a6" />
 
 ### `volume_profile.html` — Volume Profile
 Volume distribution across price levels with Point of Control and Value Area detection.
