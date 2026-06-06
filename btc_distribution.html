@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC — распределение дневных доходностей</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; background: #fff; color: #111; padding: 1.5rem; max-width: 800px; margin: 0 auto; }
+  @media (prefers-color-scheme: dark) { body { background: #1a1a1a; color: #eee; } }
+
+  .stats { display: flex; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .stat-card {
+    background: #f3f3f0; border-radius: 8px; padding: 1rem;
+    flex: 1; min-width: 120px;
+  }
+  @media (prefers-color-scheme: dark) { .stat-card { background: #2a2a2a; } }
+  .stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 500; }
+
+  .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 0.5rem; }
+  .controls label { font-size: 13px; color: #888; white-space: nowrap; }
+  .controls input[type=range] { flex: 1; }
+  .threshold-label { font-size: 14px; font-weight: 500; min-width: 52px; text-align: right; }
+
+  .preset-btns { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .preset-btns button {
+    font-size: 12px; padding: 4px 12px; cursor: pointer;
+    border: 0.5px solid #ccc; border-radius: 6px;
+    background: transparent; color: inherit;
+  }
+  .preset-btns button:hover { background: #f0f0f0; }
+  @media (prefers-color-scheme: dark) { .preset-btns button:hover { background: #333; } }
+
+  .chart-wrap { position: relative; width: 100%; height: 320px; margin-bottom: 0.5rem; }
+  .status { font-size: 12px; color: #888; text-align: center; margin-bottom: 1rem; }
+  .legend { margin-top: 1rem; padding: 0.75rem 1rem; background: #f3f3f0; border-radius: 8px; font-size: 13px; color: #666; }
+  @media (prefers-color-scheme: dark) { .legend { background: #2a2a2a; color: #aaa; } }
+  .legend strong { color: #111; }
+  @media (prefers-color-scheme: dark) { .legend strong { color: #eee; } }
+</style>
+</head>
+<body>
+
+<div class="stats">
+  <div class="stat-card"><div class="stat-label">Среднее (μ)</div><div class="stat-value" id="stat-mean">—</div></div>
+  <div class="stat-card"><div class="stat-label">Волатильность (σ)</div><div class="stat-value" id="stat-sigma">—</div></div>
+  <div class="stat-card"><div class="stat-label">Дней данных</div><div class="stat-value" id="stat-days">—</div></div>
+  <div class="stat-card"><div class="stat-label">P(x > порога)</div><div class="stat-value" id="stat-prob">—</div></div>
+</div>
+
+<div class="controls">
+  <label>Порог: x ></label>
+  <input type="range" min="-20" max="20" value="5" step="0.5" id="threshold-slider" />
+  <span class="threshold-label" id="threshold-label">+5.0%</span>
+</div>
+
+<div class="preset-btns">
+  <button onclick="setThreshold(5)">+5%</button>
+  <button onclick="setThreshold(10)">+10%</button>
+  <button onclick="setThreshold(-5)">−5%</button>
+  <button onclick="setThreshold(-10)">−10%</button>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="btcChart" role="img" aria-label="Гистограмма дневных доходностей BTC">Загрузка...</canvas>
+</div>
+
+<div class="status" id="status-line">Загрузка данных с CoinGecko...</div>
+
+<div class="legend">
+  <strong>Как читать:</strong> синие столбцы — реальные данные BTC,
+  оранжевая линия — нормальное распределение (теория),
+  красная область — <strong>∫f(x)dx</strong> = вероятность события.
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let btcChart = null;
+let returns = [];
+let mu = 0, sigma = 1;
+let threshold = 5;
+
+function normalPDF(x, m, s) {
+  return (1 / (s * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - m) / s, 2));
+}
+
+function calcProb(thresh, rets) {
+  if (!rets.length) return 0;
+  return rets.filter(r => r > thresh).length / rets.length;
+}
+
+function setThreshold(val) {
+  threshold = val;
+  document.getElementById('threshold-slider').value = val;
+  document.getElementById('threshold-label').textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+  updateChart();
+}
+
+function updateChart() {
+  if (!btcChart || !returns.length) return;
+  const prob = calcProb(threshold, returns);
+  document.getElementById('stat-prob').textContent = (prob * 100).toFixed(1) + '%';
+  const bins = btcChart.data.labels;
+  btcChart.data.datasets[0].backgroundColor = bins.map(b =>
+    parseFloat(b) >= threshold ? 'rgba(213,90,48,0.75)' : 'rgba(55,138,221,0.4)'
+  );
+  btcChart.update('none');
+}
+
+async function loadData() {
+  try {
+    const resp = await fetch(
+      'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily'
+    );
+    if (!resp.ok) throw new Error('API error');
+    const data = await resp.json();
+    const prices = data.prices.map(p => p[1]);
+    returns = [];
+    for (let i = 1; i < prices.length; i++) {
+      returns.push(((prices[i] - prices[i - 1]) / prices[i - 1]) * 100);
+    }
+    mu = returns.reduce((a, b) => a + b, 0) / returns.length;
+    sigma = Math.sqrt(returns.reduce((a, b) => a + Math.pow(b - mu, 2), 0) / returns.length);
+    document.getElementById('stat-mean').textContent = (mu >= 0 ? '+' : '') + mu.toFixed(2) + '%';
+    document.getElementById('stat-sigma').textContent = sigma.toFixed(2) + '%';
+    document.getElementById('stat-days').textContent = returns.length;
+    document.getElementById('status-line').textContent = 'Данные за 365 дней · CoinGecko API';
+    buildChart();
+  } catch (e) {
+    document.getElementById('status-line').textContent = 'Ошибка API. Демо-данные (σ=3.8%, μ=0.18%)';
+    mu = 0.18; sigma = 3.8;
+    for (let i = 0; i < 365; i++) {
+      const u1 = Math.random(), u2 = Math.random();
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      returns.push(mu + sigma * z * (1 + 0.3 * Math.abs(z)));
+    }
+    document.getElementById('stat-mean').textContent = '+0.18%';
+    document.getElementById('stat-sigma').textContent = '3.80%';
+    document.getElementById('stat-days').textContent = '365';
+    buildChart();
+  }
+}
+
+function buildChart() {
+  const binCount = 40;
+  const minR = Math.max(-25, Math.min(...returns));
+  const maxR = Math.min(25, Math.max(...returns));
+  const binWidth = (maxR - minR) / binCount;
+
+  const binEdges = Array.from({ length: binCount + 1 }, (_, i) => minR + i * binWidth);
+  const binCenters = binEdges.slice(0, -1).map((e, i) => ((e + binEdges[i + 1]) / 2).toFixed(2));
+  const binCounts = new Array(binCount).fill(0);
+  returns.forEach(r => {
+    const idx = Math.min(Math.floor((r - minR) / binWidth), binCount - 1);
+    if (idx >= 0) binCounts[idx]++;
+  });
+  const densities = binCounts.map(c => c / (returns.length * binWidth));
+
+  const xSmooth = [];
+  for (let x = minR; x <= maxR; x += 0.2) xSmooth.push(parseFloat(x.toFixed(2)));
+  const normalVals = xSmooth.map(x => normalPDF(x, mu, sigma));
+
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const tickColor = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.5)';
+
+  const ctx = document.getElementById('btcChart').getContext('2d');
+  btcChart = new Chart(ctx, {
+    data: {
+      labels: binCenters,
+      datasets: [{
+        type: 'bar',
+        label: 'Реальные данные BTC',
+        data: densities,
+        backgroundColor: binCenters.map(b =>
+          parseFloat(b) >= threshold ? 'rgba(213,90,48,0.75)' : 'rgba(55,138,221,0.4)'
+        ),
+        borderWidth: 0,
+        borderRadius: 2,
+        barPercentage: 1.0,
+        categoryPercentage: 1.0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.datasetIndex === 0) {
+                const cnt = binCounts[ctx.dataIndex];
+                return (cnt / returns.length * 100).toFixed(1) + '% дней (' + cnt + ' дн.)';
+              }
+              return '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Дневная доходность (%)', font: { size: 12 }, color: tickColor },
+          ticks: { color: tickColor, maxTicksLimit: 10, callback: v => v + '%' },
+          grid: { color: gridColor }
+        },
+        y: {
+          title: { display: true, text: 'Плотность', font: { size: 12 }, color: tickColor },
+          ticks: { color: tickColor, maxTicksLimit: 6 },
+          grid: { color: gridColor }
+        }
+      }
+    },
+    plugins: [{
+      id: 'normalCurve',
+      afterDatasetsDraw(chart) {
+        const { ctx, scales: { x, y } } = chart;
+        ctx.save();
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#EF9F27';
+        ctx.lineWidth = 2;
+        let first = true;
+        xSmooth.forEach((xv, i) => {
+          const px = x.getPixelForValue(xv);
+          const py = y.getPixelForValue(normalVals[i]);
+          first ? (ctx.moveTo(px, py), first = false) : ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+
+        const tPx = x.getPixelForValue(threshold);
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(tPx, y.top);
+        ctx.lineTo(tPx, y.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText((threshold >= 0 ? '+' : '') + threshold.toFixed(1) + '%', tPx + 4, y.top + 14);
+
+        ctx.restore();
+      }
+    }]
+  });
+
+  document.getElementById('stat-prob').textContent =
+    (calcProb(threshold, returns) * 100).toFixed(1) + '%';
+
+  document.getElementById('threshold-slider').addEventListener('input', function () {
+    threshold = parseFloat(this.value);
+    document.getElementById('threshold-label').textContent =
+      (threshold >= 0 ? '+' : '') + threshold.toFixed(1) + '%';
+    updateChart();
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
